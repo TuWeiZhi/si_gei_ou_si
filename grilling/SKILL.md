@@ -1,13 +1,76 @@
 ---
 name: grilling
-description: Grill the user relentlessly about a plan or design. Use when the user wants to stress-test a plan before building, or uses any 'grill' trigger phrases.
+description: 手动触发的对抗式计划审查（slash command）。仅当用户显式输入 /grilling、或点名要求"grill / 压力测试 / 怼一遍"某个计划时使用。禁用自动调用，模型不得在其他场景主动触发。
 disable-model-invocation: true
 ---
 
-Interview me relentlessly about every aspect of this plan until we reach a shared understanding. Walk down each branch of the design tree, resolving dependencies between decisions one-by-one. For each question, provide your recommended answer.
+# 核心定位
 
-Ask the questions one at a time, waiting for feedback on each question before continuing. Asking multiple questions at once is bewildering.
+对用户的计划或设计做**建设性对抗式审查**：像资深评审者一样逐题追问关键决策，直到双方达成一致、所有风险都被看见。默认态度是怀疑而非相信——目标是让计划变更好，不是刁难。
 
-If a question can be answered by exploring the codebase, explore the codebase instead.
+# 会话记录（核心机制）
 
-Do not enact the plan until I confirm we have reached a shared understanding.
+grill 会话跨多轮、可能持续很久，问答与决策在长对话中极易丢失、难以回溯。**所有状态必须落盘**，上下文只留摘要——这是本 skill 的根基。
+
+**开场创建**（惰性，目录不存在则创建）：`grill-sessions/<计划名>-<YYYYMMDD>.md`。若同计划已有记录文件，先读取恢复状态，再追加新会话节，不覆盖。
+
+**文件结构**（每轮增量更新，不攒批）：
+
+```markdown
+# Grill: <计划名> — <日期>
+被审查计划: <计划文件路径，只引用不复制>
+## 设计树状态
+- 已决: D1(...) D2(...)
+- 待定: D3(依赖 D1)
+## 问答记录
+- Q1 [D1]: <问题> → 推荐: <推荐答案> | 用户: <答案>
+## 当前 frontier（本轮可问）
+- Q6 [D5]: <问题>
+## 未决项
+- <未决决策、风险>
+```
+
+**回溯协议**：用户引用编号（"回到 Q3""Q5 的答案是什么"）时，读取记录文件定位，不依赖对话记忆。会话中断或上下文被压缩后，先读最新记录文件恢复树与 frontier，再继续。
+
+**隔离原则**：只写 `grill-sessions/`，绝不写入 CLAUDE.md、docs/、gudaspec/、.codestable/ 等任何项目规划或工作流记录。
+
+**仓库卫生**：首次创建会话记录文件时，确保项目 .gitignore 含规则 `grill-sessions/*.md`——会话流水账不推远程，`grill-sessions/adr/` 蒸馏产物正常跟踪。.gitignore 不存在则创建；只追加该行，不改动已有内容，并向用户说明。非 git 项目跳过。
+
+# 开场
+
+1. 一两句话重述计划，列出已确认前提，让用户当场纠正；计划本身不清晰时，先确认"计划是什么"再进入审查。
+2. 创建会话记录文件，写入设计树初始状态。
+3. 声明方式：每轮 2-4 个编号问题、各附推荐答案，用户随时可说"停"。
+
+# 提问协议
+
+- 每轮 **2-4 个问题**，编号 Q1..Qn，各附**推荐答案 + 理由**；不确定时标注低置信度并给出最合理猜测，不回避。问题使用固定显示格式：
+
+  ```
+  ❓ **Q1** - **<问题标题>**: <问题正文，可多段，可含选项>
+
+  ➡️ <推荐答案，附理由与置信度>
+  ```
+- 一轮内只问互相独立的问题；依赖其他题答案的题放后续轮（依赖排序：先决后问）。
+- 能自己查的事实（代码库、环境）先查，或派子代理并行查证，不阻塞提问——**事实是自己的活，决策才问用户**。
+- 维度覆盖 checklist，避免凭感觉提问：目标与动机 / 用户与场景 / 约束（时间、资源、技术栈） / 依赖关系 / 风险与失败模式 / 备选方案 / 成功标准 / 范围边界 / 回滚与退出。
+- **挑战假设**：答案与已确认信息矛盾、或含未经检验的假设时，直接指出。
+- 用户答"不知道"时，先帮助推理出合理答案，不跳过。
+- 对关键决策追问一层"为什么"，确认动机而非止步于表面方案。
+
+# 过程控制
+
+- 每轮结束：把本轮问答、决策变更、新 frontier 增量写回记录文件。
+- 每 2-3 轮给两三句话的进度总结：已决 / 待定 / 新暴露的风险。
+
+# 收尾
+
+- 饱和信号：连续 2 轮只能提出非关键问题、且关键决策已全部解决 → 视为达成共识。
+- 输出**决策摘要 + 未决项 + 风险清单**，请用户显式确认。
+- 用户确认前，不得开始实施计划。
+
+# 蒸馏（仅用户显式批准时）
+
+用户批准后，把**同时满足三条**的决策蒸馏为 ADR：难逆转 / 无上下文看不懂 / 存在真实权衡。落点 `grill-sessions/adr/<NNNN>-<slug>.md`（惰性创建；扫描该目录最大编号 +1；每条约 1-3 句：背景 + 决定 + 原因）。**绝不写入 docs/adr/ 或其他项目文档。**
+
+**蒸馏后清理**：蒸馏完成且用户确认后，询问用户是否删除对应会话记录文件（默认建议删除——长期价值已由 ADR 承接；删除必须用户点头，蒸馏不可逆向重做）。
