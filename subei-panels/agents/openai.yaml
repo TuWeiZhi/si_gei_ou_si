@@ -1,4 +1,4 @@
 interface:
   display_name: "素杯连环画 Subei Panels"
-  short_description: "把文字故事变成素杯主演的 1:1 连环画分镜图:彩色世界里唯一黑白的职场小透明纸杯人"
-  default_prompt: "Use $subei-panels 把下面这个故事做成素杯连环画。先问我必要的细节,再出分镜表,确认后生成。"
+  short_description: "把文字故事变成素杯主演的方形连环画,再生成社交平台首图与发布文案 Markdown"
+  default_prompt: "Use $subei-panels 把下面的故事做成素杯连环画:按需补全细节、出分镜表,确认后生成漫画,随后生成一张社交平台首图和发布文案 Markdown。"
